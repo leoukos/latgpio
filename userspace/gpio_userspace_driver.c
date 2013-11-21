@@ -143,6 +143,10 @@ int gpio_handle()
 		return EXIT_FAILURE;
 	}
 
+	/* Return to the beginning of the output file */
+	lseek(gpio_out_fd, 0, SEEK_SET);
+
+	/* Set output low */
 	output_value = GPIO_LOW;
 	if(write(gpio_out_fd, &output_value, 1)!=1){
 		fprintf(stderr, "Could not write the value %c to %s\n", output_value, gpio_output_file);
@@ -185,6 +189,52 @@ int gpio_handle()
 void gpio_trigger_sighandler(int unused)
 {
 	fprintf(stderr, "Triggered\n");
+
+	/* Return to the beginning of the output file */
+	lseek(gpio_out_fd, 0, SEEK_SET);
+
+	/* Set output low */
+	output_value = GPIO_HIGH;
+	if(write(gpio_out_fd, &output_value, 1)!=1){
+		fprintf(stderr, "Could not write the value %c to %s\n", output_value, gpio_out);
+	}
+
+	/* Measure time */
+
+	/* Wait for event */
+	while(1) {
+		/* prepare event table */
+		FD_ZERO(&gpio_in_fds);
+		FD_SET(gpio_in_fd, &gpio_in_fds);
+
+		/* Sleep untill event, no timeout */
+		if(select(gpio_in_fd+1, NULL, NULL, &gpio_in_fds, NULL) <0){
+			fprintf(stderr, "Select failed\n");
+			break;
+		}
+
+		/* Return to the beginning of the output file */
+		lseek(gpio_out_fd, 0, SEEK_SET);
+
+
+		/* Reverse the value */
+		output_value = (output_value == GPIO_LOW) ? GPIO_HIGH : GPIO_LOW;
+		if(write(gpio_out_fd, &output_value, 1)!=1){
+			fprintf(stderr, "Could not write the value %c to %s\n",output_value, gpio_out);
+			break;
+		}
+	}
+
+	/* Return to the beginning of the output file */
+	lseek(gpio_out_fd, 0, SEEK_SET);
+
+	/* Set output low*/
+	output_value = GPIO_LOW;
+	if(write(gpio_out_fd, &output_value, 1)!=1){
+		fprintf(stderr, "Could not write the value %c to %s\n", output_value, gpio_out);
+	}
+
+	/* Compute */
 }
 
 /**
@@ -223,7 +273,10 @@ int gpio_trigger(unsigned int trigger_period)
 		return EXIT_FAILURE;
 	}
 
-	/* Set output to low */
+	/* Return to the beginning of the output file */
+	lseek(gpio_out_fd, 0, SEEK_SET);
+
+	/* Set output low */
 	output_value = GPIO_LOW;
 	if(write(gpio_out_fd, &output_value, 1)!=1){
 		fprintf(stderr, "Could not write the value %c to %s\n", output_value, gpio_output_file);
