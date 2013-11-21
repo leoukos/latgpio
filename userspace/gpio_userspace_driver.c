@@ -4,6 +4,9 @@
 #include <string.h>
 #include <fcntl.h>
 #include <sys/select.h>
+#include <signal.h>
+#include <time.h>
+#include <sys/time.h>
 #include <getopt.h>
 
 #define TYPE_HANDLER 0
@@ -88,7 +91,7 @@ int gpio_init(const char* edge, const char* direction, const char* gpio_no)
 }
 
 /**
- * Unexport gpio
+ * Unexports gpio
  *
  */
 int gpio_clean(const char* gpio_no)
@@ -101,6 +104,12 @@ int gpio_clean(const char* gpio_no)
 	return 0;
 }
 
+/**
+ * Reverses the value of the output gpio when an interrupt occurs on the input gpio
+ *
+ * return	:	EXIT_SUCCESS on sucess
+ * 				EXIT_FAILURE on failure
+ */
 int gpio_handle(const char* gpio_in, const char* gpio_out)
 {
 	int gpio_out_fd, gpio_in_fd;
@@ -165,26 +174,92 @@ int gpio_handle(const char* gpio_in, const char* gpio_out)
 	return EXIT_SUCCESS;
 }
 
+/**
+ * Trigger
+ *
+ */
+void gpio_trigger_sighandler(int unused)
+{
+	fprintf(stderr, "Triggered\n");
+}
+
+/**
+ * Periodically sets output gpio high and measure latency of new stateon input gpio
+ *
+ * gpio_in	:	input gpio
+ * gpio_out	:	output_gpio
+ * trigger_period	:	period
+ * return	:	EXIT_SUCCESS
+ * 				EXIT_FAILURE
+ */
+int gpio_trigger(const char* gpio_in, const char* gpio_out, unsigned int trigger_period)
+{
+	timer_t timer;
+	struct sigevent event;
+	struct itimerspec timerspec;
+
+	/* Open input gpio */
+
+	/* Open output gpio */
+
+	/* Set output to low */
+
+	/* Set timer */
+	signal(SIGRTMIN+1, gpio_trigger_sighandler);
+
+	event.sigev_notify = SIGEV_SIGNAL;
+	event.sigev_signo = SIGRTMIN+1;
+	
+	timerspec.it_interval.tv_sec = 0;
+	timerspec.it_interval.tv_nsec = trigger_period;
+	timerspec.it_value = timerspec.it_interval;
+	if(timer_create(CLOCK_REALTIME, &event, &timer) != 0){
+		fprintf(stderr, "Could not create timer\n");
+		return EXIT_FAILURE;
+	}
+
+	if(timer_settime(timer, 0, &timerspec, NULL) != 0 ){
+		fprintf(stderr, "Could not start timer\n");
+		return EXIT_FAILURE;
+	}
+
+	/* Main loop */
+		while(1)
+			pause();
+
+	/* We should never get here */
+	return EXIT_SUCCESS;
+}
+
+/* Clean exit after the end of duration time */
+void alarm_sighandler(int unused)
+{
+	fprintf(stderr, "SIGALRM\n");
+	exit(EXIT_SUCCESS);
+}
+
 int main(int argc, char* argv[])
 {
 	/* Variables */
 	char gpio_in[8], gpio_out[8];
-	char edge[8]="rising";
+	unsigned int trigger_period = 250000000;
+	unsigned int duration = 0;
+
 	int ret;
 	int opt_flag = 0; /* will test if all the values are set */
 	int type = TYPE_HANDLER; /* defines if the tigger or handler mode should be set */
 
 	/* Command line arguments */
-	char* usage = "\t-ioeph --triger --handler";
+	char* usage = "\t-ioph --triger --handler";
 	int option;
 	int longindex;
-	char* optstring = "i:o:e:p:h";
+	char* optstring = "i:o:p:d:h";
 	char* error_opt = "Wrong option";
 	struct option longopts[] = {
 		{"in",			1,		NULL,		'i'},
 		{"out",			1,		NULL,		'o'},
-		{"edge",			1,		NULL,		'e'},
 		{"period",		1,		NULL,		'p'},
+		{"duration",	1,		NULL,		'd'},
 		{"help",			0,		NULL,		'h'},
 		{"handler",		0,		NULL,		'1'},
 		{"trigger",		0,		NULL,		'2'},
@@ -194,28 +269,18 @@ int main(int argc, char* argv[])
 	while( (option=getopt_long(argc, argv, optstring, longopts, &longindex)) != -1){
 		switch(option){
 			case 'i':
-				if(sscanf(optarg, "%s", &gpio_in) != 1){
+				if(sscanf(optarg, "%s", gpio_in) != 1){
 					fprintf(stderr, "Could not set gpio input\n");
 					return EXIT_FAILURE;
 				}
 				opt_flag= opt_flag | 1;
 				break;
 			case 'o':
-				if(sscanf(optarg, "%s", &gpio_out) != 1){
+				if(sscanf(optarg, "%s", gpio_out) != 1){
 					fprintf(stderr, "Could not set gpio output\n");
 					return EXIT_FAILURE;
 				}
 				opt_flag= (opt_flag & 1) | 2;
-				break;
-			case 'e':
-				if(strncmp(optarg, GPIO_NONE_EDGE, 4) == 0 ||
-					strncmp(optarg, GPIO_RISING_EDGE, 6) == 0 ||
-					strncmp(optarg, GPIO_FALLING_EDGE, 7) == 0 ||
-					strncmp(optarg, GPIO_BOTH_EDGE, 6) == 0){
-					strncpy(edge, optarg, 7);
-				} else {
-					strncpy(edge, GPIO_RISING_EDGE, 6);
-				}
 				break;
 			case '1':
 				type=TYPE_HANDLER;
@@ -224,6 +289,16 @@ int main(int argc, char* argv[])
 				type=TYPE_TRIGGER;
 				break;
 			case 'p':
+				if(sscanf(optarg, "%u", &trigger_period) != 1){
+					fprintf(stderr, "Could not set trigger period\n");
+					return EXIT_FAILURE;
+				}
+				break;
+			case 'd':
+				if(sscanf(optarg, "%u", &duration) != 1){
+					fprintf(stderr, "Could not set duration\n");
+					return EXIT_FAILURE;
+				}
 				break;
 			case 'h':
 				fprintf(stderr, "Usage : \n%s\n", usage);
@@ -241,31 +316,55 @@ int main(int argc, char* argv[])
 		return EXIT_FAILURE;
 	}
 
+	/* Set alarm if duration is set */
+	if(duration != 0){
+		signal(SIGALRM, alarm_sighandler);
+		alarm(duration);
+	}
+
 	/* Gpio initialisation */
-	ret=gpio_init(edge, GPIO_OUT,  gpio_out);
+	ret=gpio_init(GPIO_NONE_EDGE, GPIO_OUT,  gpio_out);
 	if(ret == -1){
 		fprintf(stderr, "Could not export gpio output %s\n", gpio_out);
 		return EXIT_FAILURE;
 	} else if (ret == -2 || ret == -3) {
 		fprintf(stderr, "Could not set direction and/or edge for gpio output %s\n", gpio_out);
 		gpio_clean(gpio_out);
+		return EXIT_FAILURE;
 	}
 
-	ret=gpio_init(edge, GPIO_IN,  gpio_in);
+	ret=gpio_init(GPIO_BOTH_EDGE, GPIO_IN,  gpio_in);
 	if(ret == -1){
 		fprintf(stderr, "Could not export gpio input %s\n", gpio_in);
+		gpio_clean(gpio_out);
 		return EXIT_FAILURE;
 	} else if (ret == -2 || ret == -3) {
 		fprintf(stderr, "Could not set direction and/or edge for gpio input %s\n", gpio_in);
 		gpio_clean(gpio_in);
+		gpio_clean(gpio_out);
+		return EXIT_FAILURE;
 	}
 
-	/* Handle interrupt */
-	gpio_handle(gpio_in, gpio_out);
+	/* Handle/Trigger interrupt */
+	if(type==TYPE_HANDLER){
+		if(gpio_handle(gpio_in, gpio_out) < 0){
+			fprintf(stderr, "Could not start handler loop\n");
+			gpio_clean(gpio_out);
+			gpio_clean(gpio_in);
+			return EXIT_FAILURE;
+		}
+	} else {
+		if(gpio_trigger(gpio_in, gpio_out, trigger_period) == EXIT_FAILURE){
+			fprintf(stderr, "Could not start trigger loop\n");
+			gpio_clean(gpio_out);
+			gpio_clean(gpio_in);
+			return EXIT_FAILURE;
+		}
+	}
 
 	/* Gpio clean */		
 	gpio_clean(gpio_out);
 	gpio_clean(gpio_in);
 
-	return(EXIT_SUCCESS);
+	return EXIT_SUCCESS;
 }
