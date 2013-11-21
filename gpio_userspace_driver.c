@@ -9,6 +9,9 @@
 #define TYPE_HANDLER 0
 #define TYPE_TRIGGER 1
 
+#define GPIO_LOW '0'
+#define GPIO_HIGH '1'
+
 #define GPIO_OUT "out"
 #define GPIO_IN "in"
 
@@ -98,59 +101,68 @@ int gpio_clean(const char* gpio_no)
 	return 0;
 }
 
-int gpio_handle(const char* gpio_no)
+int gpio_handle(const char* gpio_in, const char* gpio_out)
 {
-	int gpio_fd;
-	fd_set gpio_fds;
-	struct timeval tv;
-	char buffer[2];
-	char gpio_value_file[128];
-
+	int gpio_out_fd, gpio_in_fd;
+	fd_set gpio_in_fds;
+	char value;
+	char gpio_input_file[128];
+	char gpio_output_file[128];
 
 	
-	/* Open the /sys file */
-	if(snprintf(gpio_value_file, 128, "/sys/class/gpio/gpio%d/value", gpio_no) < 0){
-		fprintf(stderr, "An error occured while opening value file\n");
-		exit(EXIT_FAILURE);
+	/* Open the input file */
+	if(snprintf(gpio_input_file, 128, "gpio/gpio%s/value", gpio_in) < 0){
+		fprintf(stderr, "An error occured while opening value file for input gpio %s\n", gpio_in);
+		return EXIT_FAILURE;
 	}
-	if((gpio_fd=open(gpio_value_file, O_RDONLY)) < 0){
-		fprintf(stderr, "Coudl not open %s\n", gpio_value_file);
-		exit(EXIT_FAILURE);
+	if((gpio_in_fd=open(gpio_input_file, O_RDONLY)) < 0){
+		fprintf(stderr, "Could not open %s\n", gpio_input_file);
+		return EXIT_FAILURE;
+	}
+
+	/* Open the output file */
+	if(snprintf(gpio_output_file, 128, "gpio/gpio%s/value", gpio_out) < 0){
+		fprintf(stderr, "An error occured while opening value file for output gpio %s\n", gpio_out);
+		return EXIT_FAILURE;
+	}
+	if((gpio_out_fd=open(gpio_output_file, O_WRONLY)) < 0){
+		fprintf(stderr, "Could not open %s\n", gpio_output_file);
+		return EXIT_FAILURE;
+	}
+
+	value = GPIO_HIGH;
+	if(write(gpio_out_fd, &value, 1)!=1){
+		fprintf(stderr, "Could not write the value %c to %s\n", value, gpio_output_file);
 	}
 
 	/* Main loop */
 	while(1) {
 		/* prepare event table */
-		FD_ZERO(&gpio_fds);
-		FD_SET(gpio_fd, &gpio_fds);
+		FD_ZERO(&gpio_in_fds);
+		FD_SET(gpio_in_fd, &gpio_in_fds);
 
-		/* Sleep untill event */
-		if(select(gpio_fd+1, NULL, NULL, &gpio_fds, NULL) <0){
+		/* Sleep untill event, no timeout */
+		if(select(gpio_in_fd+1, NULL, NULL, &gpio_in_fds, NULL) <0){
 			fprintf(stderr, "Select failed\n");
 			break;
 		}
 		
-		gettimeofday(&tv, NULL);
+		/* Return to the beginning of the output file */
+		lseek(gpio_out_fd, 0, SEEK_SET);
 
-		/* Return to the beginning of the file */
-		lseek(gpio_fd, 0, SEEK_SET);
 
-		/* Read the value */
-		if(read(gpio_fd, &buffer, 2)!=2){
-			fprintf(stderr, "Could not read the value\n");
+		/* Reverse the value */
+		value = (value == GPIO_LOW) ? GPIO_HIGH : GPIO_LOW;
+		if(write(gpio_out_fd, &value, 1)!=1){
+			fprintf(stderr, "Could not write the value\n");
 			break;
 		}
-
-		/* Get read of final \n */
-		buffer[1]='\0';
-
-		/* Print value */
-		fprintf(stdout, "[%ld.%06ld]: %s\n", tv.tv_sec, tv.tv_usec, buffer);
 	}
 
-	/* We should never get here  but still... */
-	close(gpio_fd);
-	return(EXIT_SUCCESS);
+	/* We should never get here but still... */
+	close(gpio_in_fd);
+	close(gpio_out_fd);
+	return EXIT_SUCCESS;
 }
 
 int main(int argc, char* argv[])
@@ -163,7 +175,7 @@ int main(int argc, char* argv[])
 	int type = TYPE_HANDLER; /* defines if the tigger or handler mode should be set */
 
 	/* Command line arguments */
-	char* usage = "\t-ioeph";
+	char* usage = "\t-ioeph --triger --handler";
 	int option;
 	int longindex;
 	char* optstring = "i:o:e:p:h";
@@ -249,7 +261,7 @@ int main(int argc, char* argv[])
 	}
 
 	/* Handle interrupt */
-	//gpio_handle(gpio_no);
+	gpio_handle(gpio_in, gpio_out);
 
 	/* Gpio clean */		
 	gpio_clean(gpio_out);
@@ -257,5 +269,3 @@ int main(int argc, char* argv[])
 
 	return(EXIT_SUCCESS);
 }
-
-
