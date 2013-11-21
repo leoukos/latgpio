@@ -5,77 +5,85 @@
 #include <fcntl.h>
 #include <sys/select.h>
 
-int gpio_init(char* edge, char* direction, int gpio_no)
+/**
+ * Opens a file and write to it
+ *
+ * file		:	filename
+ * buf		:	buffer
+ * size		:	buffer size
+ * return	:	-1 if opening fails
+ * 				-2 if write fails
+ */
+int open_and_write(char* file, char* buf, size_t size)
 {
-	int fd;
-	char file[128];
+	FILE* fd;
 
-	/* Check presence of gpio  */
+	if((fd=fopen(file, "w"))== NULL){
+		return -1;
+	}
+
+	if(fwrite(buf, size, 1, fd) <= 0 ){
+		return -2;
+	}
+
+	fclose(fd);
+	return 0;
+}
+
+/**
+ * Exports gpio, set direction and edge
+ *
+ * return	:	-1 if export fails
+ * 				-2 if direction fails
+ * 				-3 if edge fails
+ */
+int gpio_init(char* edge, char* direction, char* gpio_no)
+{
+	char buf[128];
+
+	/* Check presence */
 
 	/* Export gpio */
-	if((fd=open("/sys/class/gpio/export", O_WRONLY)) < 0){
-		fprintf(stderr, "Could not export gpio %d\n", gpio_no);	
-		exit(EXIT_FAILURE);
-	}
-	if(write(fd, &gpio_no, sizeof(int))==-1){
-		fprintf(stderr, "Could not export gpio %d\n", gpio_no);	
-		exit(EXIT_FAILURE);
+	if(open_and_write("gpio/export", gpio_no, sizeof(char)*strnlen(gpio_no, 8)) < 0){
+		fprintf(stderr, "Could not export gpio %s\n", gpio_no);
+		return -1;
 	}
 
-	close(fd);
+	/* Set direction */
+	if(snprintf(buf, 128, "gpio/gpio%s/direction", gpio_no) < 0){
+		fprintf(stderr, "Could not create direction string for gpio %s\n", gpio_no);
+		return -2;
+	}
+	if(open_and_write(buf, direction, sizeof(char)*strnlen(direction, 3)) < 0){
+		fprintf(stderr, "Could not set direction for gpio %s\n", gpio_no);
+		return -2;
+	}
 
 	/* Set edge */
-	if(snprintf(file, 128, "/sys/class/gpio/gpio%d/edge", gpio_no) < 0){
-		fprintf(stderr, "An error occured while opening value file\n");
-		exit(EXIT_FAILURE);
+	if(snprintf(buf, 128, "gpio/gpio%s/edge", gpio_no) < 0){
+		fprintf(stderr, "Could not create edge string for gpio %s\n", gpio_no);
+		return -3;
 	}
-
-	if((fd=open(file, O_WRONLY)) < 0){
-		fprintf(stderr, "Could not set edge for gpio %d\n", gpio_no);	
-		exit(EXIT_FAILURE);
+	if(open_and_write(buf, edge, sizeof(char)*strnlen(edge, 8)) < 0){
+		fprintf(stderr, "Could not create edge string for gpio %s\n", gpio_no);
+		return -1;
 	}
-	if(write(fd, &edge, sizeof(char)*strnlen(edge, 8))==-1){
-		fprintf(stderr, "Could not set edge for gpio %d\n", gpio_no);	
-		exit(EXIT_FAILURE);
-	}
-
-	close(fd);
-	
-	/* Set direction */
-	if(snprintf(file, 128, "/sys/class/gpio/gpio%d/direction", gpio_no) < 0){
-		fprintf(stderr, "An error occured while opening direction file\n");
-		exit(EXIT_FAILURE);
-	}
-
-	if((fd=open(file, O_WRONLY)) < 0){
-		fprintf(stderr, "Could not set direction for gpio %d\n", gpio_no);	
-		exit(EXIT_FAILURE);
-	}
-	if(write(fd, &direction, sizeof(char)*strnlen(direction, 4))==-1){
-		fprintf(stderr, "Could not set direction for gpio %d\n", gpio_no);	
-		exit(EXIT_FAILURE);
-	}
-
-	close(fd);
 
 	return 0;
 }
 
-int gpio_clean(int gpio_no)
+/**
+ * Unexport gpio
+ *
+ */
+int gpio_clean(char* gpio_no)
 {
-	int fd;
-
-	/* Unexport gpio */
-	if((fd=open("/sys/class/gpio/unexport", O_WRONLY)) < 0){
-		fprintf(stderr, "Could not unexport gpio %d\n", gpio_no);	
-		exit(EXIT_FAILURE);
+	/* Unexport gpio_no */
+	if(open_and_write("gpio/unexport", gpio_no, sizeof(char)*strnlen(gpio_no, 8)) < 0){
+		fprintf(stderr, "Could not unexport gpio %s\n", gpio_no);
+		return -1;
 	}
-	if(write(fd, &gpio_no, sizeof(int))==-1){
-		fprintf(stderr, "Could not unexport gpio %d\n", gpio_no);	
-		exit(EXIT_FAILURE);
-	}
-
-	close(fd);
+	return 0;
 }
 
 int gpio_handle(int gpio_no)
@@ -136,35 +144,24 @@ int gpio_handle(int gpio_no)
 int main(int argc, char* argv[])
 {
 	/* Variables */
-	int gpio_no;
+	char gpio_no[8];
 	char edge[8];
+	int ret;
 
 	/* Command line arguments */
-	if(argc != 3){
-		fprintf(stderr, "Usage : %s  <edge>  <gpio_number>\n", argv[0]);
-		exit(EXIT_FAILURE);
-	}
-
-	if((strncmp(argv[1], "none", 4)==0) ||
-		(strncmp(argv[1], "falling", 7)==0) ||
-		(strncmp(argv[1], "rising", 6)==0) ||
-		(strncmp(argv[1], "both", 4)==0)){
-		strncpy(edge, argv[1], 8);
-	} else{
-		fprintf(stderr, "Wrong edge value\n");
-		exit(EXIT_FAILURE);
-	}
-
-	if(sscanf(argv[2], "%d", &gpio_no)!=1){
-		fprintf(stderr, "Could not read gpio number\n");
-		exit(EXIT_FAILURE);
-	}
 
 	/* Gpio initialisation */
-	gpio_init(edge, "out",  gpio_no);
+	ret=gpio_init(argv[1], "out",  argv[2]);
+	if(ret == -1){
+		fprintf(stderr, "Could not export gpio %s\n", gpio_no);
+		return EXIT_FAILURE;
+	} else if (ret == -2 || ret == -3) {
+		fprintf(stderr, "Could not set direction and/or edge for gpio %s\n", gpio_no);
+		gpio_clean(gpio_no);
+	}
 
 	/* Handle interrupt */
-	gpio_handle(gpio_no);
+	//gpio_handle(gpio_no);
 
 	/* Gpio clean */		
 	gpio_clean(gpio_no);
