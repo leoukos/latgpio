@@ -23,6 +23,13 @@
 #define GPIO_FALLING_EDGE "falling"
 #define GPIO_BOTH_EDGE "both"
 
+/* Input and output file descriptors, values */
+char gpio_in[8], gpio_out[8];
+int gpio_out_fd, gpio_in_fd;
+char gpio_in[8], gpio_out[8];
+fd_set gpio_in_fds;
+char output_value;
+
 /**
  * Opens a file and write to it
  *
@@ -107,14 +114,11 @@ int gpio_clean(const char* gpio_no)
 /**
  * Reverses the value of the output gpio when an interrupt occurs on the input gpio
  *
- * return	:	EXIT_SUCCESS on sucess
+ * return	:	EXIT_SUCCESS on success
  * 				EXIT_FAILURE on failure
  */
-int gpio_handle(const char* gpio_in, const char* gpio_out)
+int gpio_handle()
 {
-	int gpio_out_fd, gpio_in_fd;
-	fd_set gpio_in_fds;
-	char value;
 	char gpio_input_file[128];
 	char gpio_output_file[128];
 
@@ -139,9 +143,9 @@ int gpio_handle(const char* gpio_in, const char* gpio_out)
 		return EXIT_FAILURE;
 	}
 
-	value = GPIO_HIGH;
-	if(write(gpio_out_fd, &value, 1)!=1){
-		fprintf(stderr, "Could not write the value %c to %s\n", value, gpio_output_file);
+	output_value = GPIO_LOW;
+	if(write(gpio_out_fd, &output_value, 1)!=1){
+		fprintf(stderr, "Could not write the value %c to %s\n", output_value, gpio_output_file);
 	}
 
 	/* Main loop */
@@ -161,9 +165,9 @@ int gpio_handle(const char* gpio_in, const char* gpio_out)
 
 
 		/* Reverse the value */
-		value = (value == GPIO_LOW) ? GPIO_HIGH : GPIO_LOW;
-		if(write(gpio_out_fd, &value, 1)!=1){
-			fprintf(stderr, "Could not write the value\n");
+		output_value = (output_value == GPIO_LOW) ? GPIO_HIGH : GPIO_LOW;
+		if(write(gpio_out_fd, &output_value, 1)!=1){
+			fprintf(stderr, "Could not write the value %c to %s\n",output_value, gpio_output_file);
 			break;
 		}
 	}
@@ -186,23 +190,44 @@ void gpio_trigger_sighandler(int unused)
 /**
  * Periodically sets output gpio high and measure latency of new stateon input gpio
  *
- * gpio_in	:	input gpio
- * gpio_out	:	output_gpio
  * trigger_period	:	period
  * return	:	EXIT_SUCCESS
  * 				EXIT_FAILURE
  */
-int gpio_trigger(const char* gpio_in, const char* gpio_out, unsigned int trigger_period)
+int gpio_trigger(unsigned int trigger_period)
 {
+	char gpio_output_file[128];
+	char gpio_input_file[128];
+
 	timer_t timer;
 	struct sigevent event;
 	struct itimerspec timerspec;
 
-	/* Open input gpio */
+	/* Open the input file */
+	if(snprintf(gpio_input_file, 128, "gpio/gpio%s/value", gpio_in) < 0){
+		fprintf(stderr, "An error occured while opening value file for input gpio %s\n", gpio_in);
+		return EXIT_FAILURE;
+	}
+	if((gpio_in_fd=open(gpio_input_file, O_RDONLY)) < 0){
+		fprintf(stderr, "Could not open %s\n", gpio_input_file);
+		return EXIT_FAILURE;
+	}
 
-	/* Open output gpio */
+	/* Open the output file */
+	if(snprintf(gpio_output_file, 128, "gpio/gpio%s/value", gpio_out) < 0){
+		fprintf(stderr, "An error occured while opening value file for input gpio %s\n", gpio_out);
+		return EXIT_FAILURE;
+	}
+	if((gpio_out_fd=open(gpio_output_file, O_WRONLY)) < 0){
+		fprintf(stderr, "Could not open %s\n", gpio_output_file);
+		return EXIT_FAILURE;
+	}
 
 	/* Set output to low */
+	output_value = GPIO_LOW;
+	if(write(gpio_out_fd, &output_value, 1)!=1){
+		fprintf(stderr, "Could not write the value %c to %s\n", output_value, gpio_output_file);
+	}
 
 	/* Set timer */
 	signal(SIGRTMIN+1, gpio_trigger_sighandler);
@@ -234,14 +259,21 @@ int gpio_trigger(const char* gpio_in, const char* gpio_out, unsigned int trigger
 /* Clean exit after the end of duration time */
 void alarm_sighandler(int unused)
 {
-	fprintf(stderr, "SIGALRM\n");
+	/* Close gpio files */
+	close(gpio_in_fd);
+	close(gpio_out_fd);
+
+	/* Unexport gpios */
+	gpio_clean(gpio_in);
+	gpio_clean(gpio_out);
+
+	/* We are done */
 	exit(EXIT_SUCCESS);
 }
 
 int main(int argc, char* argv[])
 {
 	/* Variables */
-	char gpio_in[8], gpio_out[8];
 	unsigned int trigger_period = 250000000;
 	unsigned int duration = 0;
 
@@ -347,14 +379,14 @@ int main(int argc, char* argv[])
 
 	/* Handle/Trigger interrupt */
 	if(type==TYPE_HANDLER){
-		if(gpio_handle(gpio_in, gpio_out) < 0){
+		if(gpio_handle() < 0){
 			fprintf(stderr, "Could not start handler loop\n");
 			gpio_clean(gpio_out);
 			gpio_clean(gpio_in);
 			return EXIT_FAILURE;
 		}
 	} else {
-		if(gpio_trigger(gpio_in, gpio_out, trigger_period) == EXIT_FAILURE){
+		if(gpio_trigger(trigger_period) == EXIT_FAILURE){
 			fprintf(stderr, "Could not start trigger loop\n");
 			gpio_clean(gpio_out);
 			gpio_clean(gpio_in);
