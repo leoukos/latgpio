@@ -26,7 +26,6 @@
 /* Input and output file descriptors, values */
 char gpio_in[8], gpio_out[8];
 int gpio_out_fd, gpio_in_fd;
-char gpio_in[8], gpio_out[8];
 fd_set gpio_in_fds;
 char output_value;
 
@@ -154,7 +153,7 @@ int gpio_handle()
 
 	/* Main loop */
 	while(1) {
-		/* prepare event table */
+		/* Prepare event table */
 		FD_ZERO(&gpio_in_fds);
 		FD_SET(gpio_in_fd, &gpio_in_fds);
 
@@ -189,11 +188,14 @@ int gpio_handle()
 void gpio_trigger_sighandler(int unused)
 {
 	fprintf(stderr, "Triggered\n");
+	/* Prepare event table */
+	FD_ZERO(&gpio_in_fds);
+	FD_SET(gpio_in_fd, &gpio_in_fds);
 
 	/* Return to the beginning of the output file */
 	lseek(gpio_out_fd, 0, SEEK_SET);
 
-	/* Set output low */
+	/* Set output high */
 	output_value = GPIO_HIGH;
 	if(write(gpio_out_fd, &output_value, 1)!=1){
 		fprintf(stderr, "Could not write the value %c to %s\n", output_value, gpio_out);
@@ -201,40 +203,25 @@ void gpio_trigger_sighandler(int unused)
 
 	/* Measure time */
 
-	/* Wait for event */
-	while(1) {
-		/* prepare event table */
-		FD_ZERO(&gpio_in_fds);
-		FD_SET(gpio_in_fd, &gpio_in_fds);
-
-		/* Sleep untill event, no timeout */
-		if(select(gpio_in_fd+1, NULL, NULL, &gpio_in_fds, NULL) <0){
-			fprintf(stderr, "Select failed\n");
-			break;
-		}
-
-		/* Return to the beginning of the output file */
-		lseek(gpio_out_fd, 0, SEEK_SET);
-
-
-		/* Reverse the value */
-		output_value = (output_value == GPIO_LOW) ? GPIO_HIGH : GPIO_LOW;
-		if(write(gpio_out_fd, &output_value, 1)!=1){
-			fprintf(stderr, "Could not write the value %c to %s\n",output_value, gpio_out);
-			break;
-		}
+	/* Sleep untill event, no timeout */
+	if(select(gpio_in_fd+1, NULL, NULL, &gpio_in_fds, NULL) <0){
+		fprintf(stderr, "Select failed\n");
+		return;
 	}
+
+	/* Measure time */
 
 	/* Return to the beginning of the output file */
 	lseek(gpio_out_fd, 0, SEEK_SET);
 
-	/* Set output low*/
-	output_value = GPIO_LOW;
+	/* Reverse the value */
+	output_value = (output_value == GPIO_LOW) ? GPIO_HIGH : GPIO_LOW;
 	if(write(gpio_out_fd, &output_value, 1)!=1){
-		fprintf(stderr, "Could not write the value %c to %s\n", output_value, gpio_out);
+		fprintf(stderr, "Could not write the value %c to %s\n",output_value, gpio_out);
+		return;
 	}
 
-	/* Compute */
+	/* Compute and print */
 }
 
 /**
