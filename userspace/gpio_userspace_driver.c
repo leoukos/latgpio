@@ -150,6 +150,23 @@ int gpio_handler()
 		fprintf(stderr, "Could not write the value %c to %s\n", output_value, gpio_output_file);
 	}
 
+	/* The first select will wor immediately */
+	/* Prepare event table */
+	FD_ZERO(&gpio_in_fds);
+	FD_SET(gpio_in_fd, &gpio_in_fds);
+
+	/* Sleep untill event, no timeout */
+	if(select(gpio_in_fd+1, NULL, NULL, &gpio_in_fds, NULL) < 0){
+		fprintf(stderr, "Select failed\n");
+		return EXIT_FAILURE;
+	}
+	/* Read the input value (otherwise select will not wait) */
+	lseek(gpio_in_fd, 0, SEEK_SET);
+	if(read(gpio_in_fd, &input_value, 2) != 2){
+		fprintf(stderr, "Could not read the value from %s\n", gpio_in);
+		return EXIT_FAILURE;
+	}
+
 	/* Main loop */
 	while(1) {
 		/* Prepare event table */
@@ -165,15 +182,15 @@ int gpio_handler()
 		/* Reverse the value */
 		lseek(gpio_out_fd, 0, SEEK_SET);
 		output_value = (output_value == GPIO_LOW) ? GPIO_HIGH : GPIO_LOW;
-		if(write(gpio_out_fd, &output_value, 1)!=1){
+		if(write(gpio_out_fd, &output_value, 1) != 1){
 			fprintf(stderr, "Could not write the value %c to %s\n",output_value, gpio_output_file);
 			break;
 		}
 
 		/* Read the input value (otherwise select will not wait) */
 		lseek(gpio_in_fd, 0, SEEK_SET);
-		if(write(gpio_out_fd, &input_value, 1)!=1){
-			fprintf(stderr, "Could not read the value from %s\n", gpio_input_file);
+		if(read(gpio_in_fd, &input_value, 2) != 2){
+			fprintf(stderr, "Could not read the value from %s\n", gpio_in);
 			break;
 		}
 	}
@@ -202,7 +219,7 @@ void gpio_trigger_sighandler(int unused)
 	/* Set output high */
 	lseek(gpio_out_fd, 0, SEEK_SET);
 	output_value = GPIO_HIGH;
-	if(write(gpio_out_fd, &output_value, 1)!=1){
+	if(write(gpio_out_fd, &output_value, 1) != 1){
 		fprintf(stderr, "Could not write the value %c to %s\n", output_value, gpio_out);
 		return;
 	}
@@ -222,14 +239,14 @@ void gpio_trigger_sighandler(int unused)
 	/* Reverse the output value */
 	lseek(gpio_out_fd, 0, SEEK_SET);
 	output_value = (output_value == GPIO_LOW) ? GPIO_HIGH : GPIO_LOW;
-	if(write(gpio_out_fd, &output_value, 1)!=1){
+	if(write(gpio_out_fd, &output_value, 1) != 1){
 		fprintf(stderr, "Could not write the value %c to %s\n", output_value, gpio_out);
 		return;
 	}
 
 	/* Read the input value (otherwise select will not wait) */
 	lseek(gpio_in_fd, 0, SEEK_SET);
-	if(write(gpio_in_fd, &input_value, 1)!=1){
+	if(read(gpio_in_fd, &input_value, 2) != 2){
 		fprintf(stderr, "Could not read the value for input gpio %s\n", gpio_in);
 		return;
 	}
@@ -253,6 +270,7 @@ int gpio_trigger(unsigned int trigger_period)
 {
 	char gpio_output_file[128];
 	char gpio_input_file[128];
+	char input_value[2];
 
 	timer_t timer;
 	struct sigevent event;
@@ -283,6 +301,23 @@ int gpio_trigger(unsigned int trigger_period)
 	output_value = GPIO_LOW;
 	if(write(gpio_out_fd, &output_value, 1)!=1){
 		fprintf(stderr, "Could not write the value %c to %s\n", output_value, gpio_output_file);
+	}
+
+	/* The first select will wor immediately */
+	/* Prepare event table */
+	FD_ZERO(&gpio_in_fds);
+	FD_SET(gpio_in_fd, &gpio_in_fds);
+
+	/* Sleep untill event, no timeout */
+	if(select(gpio_in_fd+1, NULL, NULL, &gpio_in_fds, NULL) < 0){
+		fprintf(stderr, "Select failed\n");
+		return EXIT_FAILURE;
+	}
+	/* Read the input value (otherwise select will not wait) */
+	lseek(gpio_in_fd, 0, SEEK_SET);
+	if(read(gpio_in_fd, &input_value, 2) != 2){
+		fprintf(stderr, "Could not read the value from %s\n", gpio_in);
+		return EXIT_FAILURE;
 	}
 
 	/* Set timer */
@@ -421,7 +456,7 @@ int main(int argc, char* argv[])
 		return EXIT_FAILURE;
 	}
 
-	ret=gpio_init(GPIO_RISING_EDGE, GPIO_IN,  gpio_in);
+	ret=gpio_init(GPIO_BOTH_EDGE, GPIO_IN,  gpio_in);
 	if(ret == -1){
 		fprintf(stderr, "Could not export gpio input %s\n", gpio_in);
 		gpio_clean(gpio_out);
