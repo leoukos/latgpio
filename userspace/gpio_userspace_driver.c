@@ -202,6 +202,7 @@ void gpio_trigger_sighandler(int unused)
 	output_value = GPIO_HIGH;
 	if(write(gpio_out_fd, &output_value, 1)!=1){
 		fprintf(stderr, "Could not write the value %c to %s\n", output_value, gpio_out);
+		return;
 	}
 
 	/* Measure time */
@@ -229,7 +230,8 @@ void gpio_trigger_sighandler(int unused)
 	/* Compute and print */
 	latency = stop_time.tv_sec - start_time.tv_sec;
 	latency *= 1000000;
-	latency += stop_time.tv_usec - stop_time.tv_usec;
+	latency = stop_time.tv_usec - start_time.tv_usec;
+
 	fprintf(stdout, "%06lld\n", latency);
 }
 
