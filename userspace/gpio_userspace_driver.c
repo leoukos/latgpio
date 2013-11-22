@@ -187,6 +187,9 @@ int gpio_handle()
  */
 void gpio_trigger_sighandler(int unused)
 {
+	struct timeval start_time, stop_time;
+	long long int latency;
+
 	fprintf(stderr, "Triggered\n");
 	/* Prepare event table */
 	FD_ZERO(&gpio_in_fds);
@@ -202,6 +205,7 @@ void gpio_trigger_sighandler(int unused)
 	}
 
 	/* Measure time */
+	gettimeofday(&start_time, NULL);
 
 	/* Sleep untill event, no timeout */
 	if(select(gpio_in_fd+1, NULL, NULL, &gpio_in_fds, NULL) <0){
@@ -210,6 +214,7 @@ void gpio_trigger_sighandler(int unused)
 	}
 
 	/* Measure time */
+	gettimeofday(&stop_time, NULL);
 
 	/* Return to the beginning of the output file */
 	lseek(gpio_out_fd, 0, SEEK_SET);
@@ -222,6 +227,10 @@ void gpio_trigger_sighandler(int unused)
 	}
 
 	/* Compute and print */
+	latency = stop_time.tv_sec - start_time.tv_sec;
+	latency *= 1000000;
+	latency += stop_time.tv_usec - stop_time.tv_usec;
+	fprintf(stdout, "%06lld\n", latency);
 }
 
 /**
