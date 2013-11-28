@@ -1,6 +1,7 @@
-#include <linux/init.h>
+#include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/gpio.h>
+
 
 #define FT_GPIO_OUT 22
 #define FT_GPIO_IN 23
