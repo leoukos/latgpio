@@ -99,15 +99,17 @@ int gpio_init(const char* edge, const char* direction, const char* gpio_no)
 /**
  * Unexports gpio
  *
+ * return :		EXIT_SUCCESS
+ * 				EXIT_FAILURE
  */
 int gpio_clean(const char* gpio_no)
 {
 	/* Unexport gpio_no */
 	if(open_and_write("gpio/unexport", gpio_no, sizeof(char)*strnlen(gpio_no, 8)) < 0){
 		fprintf(stderr, "Could not unexport gpio %s\n", gpio_no);
-		return -1;
+		return EXIT_FAILURE;
 	}
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 /**
@@ -150,7 +152,7 @@ int gpio_handler()
 		fprintf(stderr, "Could not write the value %c to %s\n", output_value, gpio_output_file);
 	}
 
-	/* The first select will wor immediately */
+	/* The first select will work immediately */
 	/* Prepare event table */
 	FD_ZERO(&gpio_in_fds);
 	FD_SET(gpio_in_fd, &gpio_in_fds);
@@ -202,7 +204,8 @@ int gpio_handler()
 }
 
 /**
- * Trigger
+ * Trigger, called periodically with timer
+ * This is where all the handling happens
  *
  */
 void gpio_trigger_sighandler(int unused)
@@ -212,6 +215,7 @@ void gpio_trigger_sighandler(int unused)
 	char input_value[2];
 
 	fprintf(stderr, "Triggered\n");
+
 	/* Prepare event table */
 	FD_ZERO(&gpio_in_fds);
 	FD_SET(gpio_in_fd, &gpio_in_fds);
@@ -252,6 +256,7 @@ void gpio_trigger_sighandler(int unused)
 	}
 
 	/* Compute and print */
+	/* FIX OVERFLOW problem */
 	latency = stop_time.tv_sec - start_time.tv_sec;
 	latency *= 1000000;
 	latency = stop_time.tv_usec - start_time.tv_usec;
@@ -347,7 +352,10 @@ int gpio_trigger(unsigned int trigger_period)
 	return EXIT_SUCCESS;
 }
 
-/* Clean exit after the end of duration time */
+/**
+ * Clean exit after the end of duration time 
+ *
+ */
 void alarm_sighandler(int unused)
 {
 	/* Close gpio files */
@@ -438,6 +446,9 @@ int main(int argc, char* argv[])
 		fprintf(stderr, "You must set at least input and output\nUsage : \n%s\n", usage);
 		return EXIT_FAILURE;
 	}
+
+	/* Clean exit on Ctrl-C */
+	signal(SIGINT, alarm_sighandler);
 
 	/* Set alarm if duration is set */
 	if(duration != 0){
