@@ -68,13 +68,13 @@ int gpio_init(const char* edge, const char* direction, const char* gpio_no)
 	/* Check presence */
 
 	/* Export gpio */
-	if(open_and_write("gpio/export", gpio_no, sizeof(char)*strnlen(gpio_no, 8)) < 0){
+	if(open_and_write("/sys/class/gpio/export", gpio_no, sizeof(char)*strnlen(gpio_no, 8)) < 0){
 		fprintf(stderr, "Could not export gpio %s\n", gpio_no);
 		return -1;
 	}
 
 	/* Set direction */
-	if(snprintf(buf, 128, "gpio/gpio%s/direction", gpio_no) < 0){
+	if(snprintf(buf, 128, "/sys/class/gpio/gpio%s/direction", gpio_no) < 0){
 		fprintf(stderr, "Could not create direction string for gpio %s\n", gpio_no);
 		return -2;
 	}
@@ -84,7 +84,7 @@ int gpio_init(const char* edge, const char* direction, const char* gpio_no)
 	}
 
 	/* Set edge */
-	if(snprintf(buf, 128, "gpio/gpio%s/edge", gpio_no) < 0){
+	if(snprintf(buf, 128, "/sys/class/gpio/gpio%s/edge", gpio_no) < 0){
 		fprintf(stderr, "Could not create edge string for gpio %s\n", gpio_no);
 		return -3;
 	}
@@ -105,7 +105,7 @@ int gpio_init(const char* edge, const char* direction, const char* gpio_no)
 int gpio_clean(const char* gpio_no)
 {
 	/* Unexport gpio_no */
-	if(open_and_write("gpio/unexport", gpio_no, sizeof(char)*strnlen(gpio_no, 8)) < 0){
+	if(open_and_write("/sys/class/gpio/unexport", gpio_no, sizeof(char)*strnlen(gpio_no, 8)) < 0){
 		fprintf(stderr, "Could not unexport gpio %s\n", gpio_no);
 		return EXIT_FAILURE;
 	}
@@ -126,7 +126,7 @@ int gpio_handler()
 
 	
 	/* Open the input file */
-	if(snprintf(gpio_input_file, 128, "gpio/gpio%s/value", gpio_in) < 0){
+	if(snprintf(gpio_input_file, 128, "/sys/class/gpio/gpio%s/value", gpio_in) < 0){
 		fprintf(stderr, "An error occured while opening value file for input gpio %s\n", gpio_in);
 		return EXIT_FAILURE;
 	}
@@ -136,7 +136,7 @@ int gpio_handler()
 	}
 
 	/* Open the output file */
-	if(snprintf(gpio_output_file, 128, "gpio/gpio%s/value", gpio_out) < 0){
+	if(snprintf(gpio_output_file, 128, "/sys/class/gpio/gpio%s/value", gpio_out) < 0){
 		fprintf(stderr, "An error occured while opening value file for output gpio %s\n", gpio_out);
 		return EXIT_FAILURE;
 	}
@@ -282,7 +282,7 @@ int gpio_trigger(unsigned int trigger_period)
 	struct itimerspec timerspec;
 
 	/* Open the input file */
-	if(snprintf(gpio_input_file, 128, "gpio/gpio%s/value", gpio_in) < 0){
+	if(snprintf(gpio_input_file, 128, "/sys/class/gpio/gpio%s/value", gpio_in) < 0){
 		fprintf(stderr, "An error occured while opening value file for input gpio %s\n", gpio_in);
 		return EXIT_FAILURE;
 	}
@@ -292,7 +292,7 @@ int gpio_trigger(unsigned int trigger_period)
 	}
 
 	/* Open the output file */
-	if(snprintf(gpio_output_file, 128, "gpio/gpio%s/value", gpio_out) < 0){
+	if(snprintf(gpio_output_file, 128, "/sys/class/gpio/gpio%s/value", gpio_out) < 0){
 		fprintf(stderr, "An error occured while opening value file for input gpio %s\n", gpio_out);
 		return EXIT_FAILURE;
 	}
