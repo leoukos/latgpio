@@ -1,5 +1,7 @@
 USR=userspace
 KERN=kernel
+CROSS_COMPILE=
+ARCH=
 
 all:
 	make -C $(USR) 
