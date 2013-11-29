@@ -1,4 +1,5 @@
 CC=gcc
+CC=$(CROSS_COMPILE)
 CFLAGS=-g -Wall -Werror
 LIBS=-lrt
 
