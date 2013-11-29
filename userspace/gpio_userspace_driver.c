@@ -9,6 +9,9 @@
 #include <sys/time.h>
 #include <getopt.h>
 
+#define NOINIT 0
+#define INIT 1
+
 #define TYPE_HANDLER 0
 #define TYPE_TRIGGER 1
 
@@ -28,6 +31,8 @@ char gpio_in[8], gpio_out[8];
 int gpio_out_fd, gpio_in_fd;
 fd_set gpio_in_fds;
 char output_value;
+
+int initialize = INIT;
 
 /**
  * Opens a file and write to it
@@ -363,8 +368,10 @@ void alarm_sighandler(int unused)
 	close(gpio_out_fd);
 
 	/* Unexport gpios */
-	gpio_clean(gpio_in);
-	gpio_clean(gpio_out);
+	if(initialize == INIT){
+		gpio_clean(gpio_in);
+		gpio_clean(gpio_out);
+	}
 
 	/* We are done */
 	exit(EXIT_SUCCESS);
@@ -394,6 +401,7 @@ int main(int argc, char* argv[])
 		{"help",			0,		NULL,		'h'},
 		{"handler",		0,		NULL,		'1'},
 		{"trigger",		0,		NULL,		'2'},
+		{"noinit",		0,		NULL,		'3'},
 		{NULL,			0,		NULL,		0},
 		};
 
@@ -431,6 +439,9 @@ int main(int argc, char* argv[])
 					return EXIT_FAILURE;
 				}
 				break;
+			case '3':
+				initialize = NOINIT;
+				break;
 			case 'h':
 				fprintf(stderr, "Usage : \n%s\n", usage);
 				return EXIT_FAILURE;
@@ -457,26 +468,28 @@ int main(int argc, char* argv[])
 	}
 
 	/* Gpio initialisation */
-	ret=gpio_init(GPIO_NONE_EDGE, GPIO_OUT,  gpio_out);
-	if(ret == -1){
-		fprintf(stderr, "Could not export gpio output %s\n", gpio_out);
-		return EXIT_FAILURE;
-	} else if (ret == -2 || ret == -3) {
-		fprintf(stderr, "Could not set direction and/or edge for gpio output %s\n", gpio_out);
-		gpio_clean(gpio_out);
-		return EXIT_FAILURE;
-	}
+	if(initialize == INIT){
+		ret=gpio_init(GPIO_NONE_EDGE, GPIO_OUT,  gpio_out);
+		if(ret == -1){
+			fprintf(stderr, "Could not export gpio output %s\n", gpio_out);
+			return EXIT_FAILURE;
+		} else if (ret == -2 || ret == -3) {
+			fprintf(stderr, "Could not set direction and/or edge for gpio output %s\n", gpio_out);
+			gpio_clean(gpio_out);
+			return EXIT_FAILURE;
+		}
 
-	ret=gpio_init(GPIO_BOTH_EDGE, GPIO_IN,  gpio_in);
-	if(ret == -1){
-		fprintf(stderr, "Could not export gpio input %s\n", gpio_in);
-		gpio_clean(gpio_out);
-		return EXIT_FAILURE;
-	} else if (ret == -2 || ret == -3) {
-		fprintf(stderr, "Could not set direction and/or edge for gpio input %s\n", gpio_in);
-		gpio_clean(gpio_in);
-		gpio_clean(gpio_out);
-		return EXIT_FAILURE;
+		ret=gpio_init(GPIO_BOTH_EDGE, GPIO_IN,  gpio_in);
+		if(ret == -1){
+			fprintf(stderr, "Could not export gpio input %s\n", gpio_in);
+			gpio_clean(gpio_out);
+			return EXIT_FAILURE;
+		} else if (ret == -2 || ret == -3) {
+			fprintf(stderr, "Could not set direction and/or edge for gpio input %s\n", gpio_in);
+			gpio_clean(gpio_in);
+			gpio_clean(gpio_out);
+			return EXIT_FAILURE;
+		}
 	}
 
 	/* Handle/Trigger interrupt */
@@ -497,8 +510,10 @@ int main(int argc, char* argv[])
 	}
 
 	/* Gpio clean */		
-	gpio_clean(gpio_out);
-	gpio_clean(gpio_in);
+	if( initialize == INIT){
+		gpio_clean(gpio_out);
+		gpio_clean(gpio_in);
+	}
 
 	return EXIT_SUCCESS;
 }
