@@ -1,15 +1,19 @@
-# If we are called by kernel build system
-ifneq ($(KERNELRELEASE),)
-	obj-m := irq_ft_gpio_handler.o
-# If we are called from the command line, we call the kernel build system
+ifneq (${KERNELRELEASE},)
+	obj-m += irq_ft_gpio_handler.o hello_world.o
 else
-	KERNELDIR ?= /home/fdeslandes/Tarballs/RPI/linux
-	PWD:=$(shell pwd)
+	ARCH ?= arm
+	KERNEL_DIR ?= /home/fdeslandes/Tests/igepv2/fudge/linux-3.0.4
+	CROSS_COMPILE ?= /home/fdeslandes/Tests/buildroot-glibc-2013.11/output/host/usr/bin/arm-buildroot-linux-gnueabi-
+	MODULE_DIR := $(shell pwd)
 
-default:
-	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
+all: modules
+
+modules:
+	${MAKE} -C ${KERNEL_DIR} ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} SUBDIRS=${MODULE_DIR} modules
 
 clean:
-	$(MAKE) -C $(KERNELDIR) M=$(PWD) clean
+	rm -f *.o .*.o .*.o.* *.ko .*.ko *.mod.* .*.mod.* .*.cmd
+	rm -f Module.symvers Module.markers modules.order
+	rm -rf .tmp_versions
 
 endif

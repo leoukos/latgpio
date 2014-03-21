@@ -3,8 +3,8 @@
 #include <linux/gpio.h>
 
 // Module parameters
-static int ft_gpio_out = 22;
-static int ft_gpio_in = 23;
+static int ft_gpio_out = 141;
+static int ft_gpio_in = 136;
 
 module_param(ft_gpio_out, int, 0);
 MODULE_PARM_DESC(ft_gpio_out, "Output GPIO number");
@@ -22,6 +22,8 @@ static irqreturn_t irq_ft_gpio_handler(int irq, void* ident)
 
 	output_value = 1 - output_value;
 
+	printk(KERN_INFO "Interrupt\n");
+
 	return IRQ_HANDLED;
 }
 
@@ -32,26 +34,36 @@ static int __init module_loading(void)
 
 	printk(KERN_INFO "Loading ft_gpio_handler\n");
 
+	if(!gpio_is_valid(ft_gpio_in)){
+		printk(KERN_ALERT "Gpio number not valid\n");
+		return 0;
+	}
+
+	if(!gpio_is_valid(ft_gpio_out)){
+		printk(KERN_ALERT "Gpio number not valid\n");
+		return 0;
+	}
+
 	// Request GPIO in
 	if((err=gpio_request(ft_gpio_in, THIS_MODULE->name)) != 0){
 		return err;
 	}
 
 	// Request GPIO out
-	if((err=gpio_request(ft_gpio_in, THIS_MODULE->name)) != 0){
+	if((err=gpio_request(ft_gpio_out, THIS_MODULE->name)) != 0){
 		gpio_free(ft_gpio_in);
 		return err;
 	}
 
 	// Configure GPIO in
-	if((err=gpio_direction_input(ft_gpio_out)) != 0){
+	if((err=gpio_direction_input(ft_gpio_in)) != 0){
 		gpio_free(ft_gpio_in);
 		gpio_free(ft_gpio_out);
 		return err;
 	}
 
 	// Configure GPIO out
-	if((err=gpio_direction_output(ft_gpio_in, 1)) != 0){
+	if((err=gpio_direction_output(ft_gpio_out, 1)) != 0){
 		gpio_free(ft_gpio_in);
 		gpio_free(ft_gpio_out);
 		return err;
